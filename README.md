@@ -1,1 +1,1 @@
-# applied-python
+# _"Applied-python" course_

@@ -1,0 +1,162 @@
+#!/usr/bin/python -i
+# -*- coding: utf-8 -*-
+
+import argparse
+import sys
+import re
+
+# Конвертации поддерживаемых специальных символов в формат RegExp
+re_match = {
+    '*': '.*',
+    '?': '.'
+}
+
+
+def output(line):
+    print(line)
+
+
+def match_line(line, params):
+    """Проверка строки на соответствие паттерну"""
+    r_value = True if re.search(params.pattern, line, re.IGNORECASE if params.ignore_case else 0) else False
+
+    if params.invert:
+        r_value = not r_value
+
+    return r_value
+
+
+def grep(lines, params):
+    # Конвертирование паттерна в формат RegExp
+    for char in re_match:
+        if char in params.pattern:
+            params.pattern = params.pattern.replace(char, re_match[char])
+
+    count = 0  # count - подсчёт числа совпадений (флаг -c)
+    prev_lines_idx = []  # список индексов строк, предшествующих совпавшей в before context
+    last_printed = -1  # последняя напечатанная строка для context'ов
+    to_print = 0  # число строк для вывода в after context
+
+    if params.context:
+        params.before_context = params.before_context if params.before_context else params.context
+        params.after_context = params.after_context if params.after_context else params.context
+
+    for line_idx, line in enumerate(lines):
+        line = line.rstrip()
+        output_str = ''  # Строка для формирования вывода
+
+        match = match_line(line, params)
+
+        if match:
+            # Вычисление числа строк, удовлетворяющих паттерну
+            if params.count:
+                count += 1
+                continue
+
+            if params.before_context:
+                output_str = ''
+                if last_printed != -1 and prev_lines_idx and min(prev_lines_idx) - last_printed > 1:
+                    output("--")
+
+                # Вывод предшествующих строк
+                if line_idx - last_printed > 1:
+                    for idx in prev_lines_idx:
+                        output_str = ''
+                        if params.line_number:
+                            output_str = ''.join((str(idx + 1), '-'))
+                        output(''.join((output_str, lines[idx].rstrip())))
+                    prev_lines_idx.clear()
+                if params.line_number:
+                    output_str = ''.join((str(line_idx + 1), ':'))
+                output(''.join((output_str, line)))
+                last_printed = line_idx
+
+            if params.after_context:
+                output_str = ''
+                if last_printed != -1 and line_idx - last_printed > 1:
+                    output("--")
+                if not params.before_context:
+                    if params.line_number:
+                        output_str = ''.join((str(line_idx + 1), ':'))
+                    output(''.join((output_str, line)))
+                    last_printed = line_idx
+                to_print = params.after_context
+
+            if not (params.before_context or params.after_context):
+                if params.line_number:
+                    output_str = ''.join((str(line_idx + 1), ':'))
+                output(''.join((output_str, line)))
+
+        if params.before_context and not match:
+            prev_lines_idx.append(line_idx)
+            if len(prev_lines_idx) > params.before_context:
+                prev_lines_idx.pop(0)
+
+        if params.after_context and not match:
+            if to_print > 0:
+                output_str = ''
+                # Печатаем текущую строку в after_context
+                # И удаляем её из буфера before_context
+                if params.before_context:
+                    prev_lines_idx.pop()
+                if params.line_number:
+                    output_str = ''.join((str(line_idx + 1), '-'))
+                output(''.join((output_str, line)))
+                last_printed = line_idx
+                to_print -= 1
+    # end of for
+
+    if params.count:
+        output(str(count))
+
+
+def parse_args(args):
+    parser = argparse.ArgumentParser(description='This is a simple grep on python')
+    parser.add_argument(
+        '-v', action="store_true", dest="invert", default=False, help='Selected lines are those not matching pattern.')
+    parser.add_argument(
+        '-i', action="store_true", dest="ignore_case", default=False, help='Perform case insensitive matching.')
+    parser.add_argument(
+        '-c',
+        action="store_true",
+        dest="count",
+        default=False,
+        help='Only a count of selected lines is written to standard output.')
+    parser.add_argument(
+        '-n',
+        action="store_true",
+        dest="line_number",
+        default=False,
+        help='Each output line is preceded by its relative line number in the file, starting at line 1.')
+    parser.add_argument(
+        '-C',
+        action="store",
+        dest="context",
+        type=int,
+        default=0,
+        help='Print num lines of leading and trailing context surrounding each match.')
+    parser.add_argument(
+        '-B',
+        action="store",
+        dest="before_context",
+        type=int,
+        default=0,
+        help='Print num lines of trailing context after each match')
+    parser.add_argument(
+        '-A',
+        action="store",
+        dest="after_context",
+        type=int,
+        default=0,
+        help='Print num lines of leading context before each match.')
+    parser.add_argument('pattern', action="store", help='Search pattern. Can contain magic symbols: ?*')
+    return parser.parse_args(args)
+
+
+def main():
+    params = parse_args(sys.argv[1:])
+    grep(sys.stdin.readlines(), params)
+
+
+if __name__ == '__main__':
+    main()
