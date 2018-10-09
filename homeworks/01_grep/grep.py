@@ -18,7 +18,7 @@ def output(line):
 
 def match_line(line, params):
     """Проверка строки на соответствие паттерну"""
-    r_value = True if re.search(params.pattern, line, re.IGNORECASE if params.ignore_case else 0) else False
+    r_value = bool(re.search(params.pattern, line, re.IGNORECASE if params.ignore_case else 0))
 
     if params.invert:
         r_value = not r_value
@@ -33,7 +33,8 @@ def grep(lines, params):
             params.pattern = params.pattern.replace(char, re_match[char])
 
     count = 0  # count - подсчёт числа совпадений (флаг -c)
-    prev_lines_idx = []  # список индексов строк, предшествующих совпавшей в before context
+    prev_lines = []  # Буфер строк, предшествующих совпавшей в before context
+    prev_firstline_idx = -1  # Индекс строки, находящейся в начале буфера в before context
     last_printed = -1  # последняя напечатанная строка для context'ов
     to_print = 0  # число строк для вывода в after context
 
@@ -55,20 +56,21 @@ def grep(lines, params):
 
             if params.before_context:
                 output_str = ''
-                if last_printed != -1 and prev_lines_idx and min(prev_lines_idx) - last_printed > 1:
+                if last_printed != -1 and prev_lines and prev_firstline_idx - last_printed > 1:
                     output("--")
 
                 # Вывод предшествующих строк
                 if line_idx - last_printed > 1:
-                    for idx in prev_lines_idx:
+                    for prev_line in prev_lines:
                         output_str = ''
                         if params.line_number:
-                            output_str = ''.join((str(idx + 1), '-'))
-                        output(''.join((output_str, lines[idx].rstrip())))
-                    prev_lines_idx.clear()
+                            output_str = str(prev_firstline_idx + 1) + '-'
+                        output(output_str + prev_line)
+                        prev_firstline_idx += 1
+                    prev_lines.clear()
                 if params.line_number:
-                    output_str = ''.join((str(line_idx + 1), ':'))
-                output(''.join((output_str, line)))
+                    output_str = str(line_idx + 1) + ':'
+                output(output_str + line)
                 last_printed = line_idx
 
             if params.after_context:
@@ -77,20 +79,24 @@ def grep(lines, params):
                     output("--")
                 if not params.before_context:
                     if params.line_number:
-                        output_str = ''.join((str(line_idx + 1), ':'))
-                    output(''.join((output_str, line)))
+                        output_str = str(line_idx + 1) + ':'
+                    output(output_str + line)
                     last_printed = line_idx
                 to_print = params.after_context
 
             if not (params.before_context or params.after_context):
                 if params.line_number:
-                    output_str = ''.join((str(line_idx + 1), ':'))
-                output(''.join((output_str, line)))
+                    output_str = str(line_idx + 1) + ':'
+                output(output_str + line)
 
         if params.before_context and not match:
-            prev_lines_idx.append(line_idx)
-            if len(prev_lines_idx) > params.before_context:
-                prev_lines_idx.pop(0)
+            prev_lines.append(line)
+            if len(prev_lines) == 1:
+                prev_firstline_idx = line_idx
+
+            if len(prev_lines) > params.before_context:
+                prev_firstline_idx += 1
+                prev_lines.pop(0)
 
         if params.after_context and not match:
             if to_print > 0:
@@ -98,10 +104,10 @@ def grep(lines, params):
                 # Печатаем текущую строку в after_context
                 # И удаляем её из буфера before_context
                 if params.before_context:
-                    prev_lines_idx.pop()
+                    prev_lines.pop()
                 if params.line_number:
-                    output_str = ''.join((str(line_idx + 1), '-'))
-                output(''.join((output_str, line)))
+                    output_str = str(line_idx + 1) + '-'
+                output(output_str + line)
                 last_printed = line_idx
                 to_print -= 1
     # end of for
