@@ -95,8 +95,7 @@ def grep(lines, params):
                     prev_firstline_idx += 1
                     prev_lines.pop(0)
 
-            if params.after_context:
-                if to_print > 0:
+            if params.after_context and to_print > 0:
                     # Печатаем текущую строку в after_context
                     # И удаляем её из буфера before_context
                     if params.before_context:
