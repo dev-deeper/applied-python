@@ -12,7 +12,16 @@ re_match = {
 }
 
 
+def print_line(idx, char, line, params):
+    """Отправка строки на печать с номером строки или без"""
+    out_str = ''
+    if params.line_number:
+        out_str = str(idx + 1) + char
+    output(out_str + line)
+
+
 def output(line):
+    """Вывод строки на экран"""
     print(line)
 
 
@@ -44,7 +53,6 @@ def grep(lines, params):
 
     for line_idx, line in enumerate(lines):
         line = line.rstrip()
-        output_str = ''  # Строка для формирования вывода
 
         match = match_line(line, params)
 
@@ -55,61 +63,48 @@ def grep(lines, params):
                 continue
 
             if params.before_context:
-                output_str = ''
                 if last_printed != -1 and prev_lines and prev_firstline_idx - last_printed > 1:
                     output("--")
 
                 # Вывод предшествующих строк
                 if line_idx - last_printed > 1:
                     for prev_line in prev_lines:
-                        output_str = ''
-                        if params.line_number:
-                            output_str = str(prev_firstline_idx + 1) + '-'
-                        output(output_str + prev_line)
+                        print_line(prev_firstline_idx, '-', prev_line, params)
                         prev_firstline_idx += 1
                     prev_lines.clear()
-                if params.line_number:
-                    output_str = str(line_idx + 1) + ':'
-                output(output_str + line)
+                print_line(line_idx, ':', line, params)
                 last_printed = line_idx
 
             if params.after_context:
-                output_str = ''
                 if last_printed != -1 and line_idx - last_printed > 1:
                     output("--")
                 if not params.before_context:
-                    if params.line_number:
-                        output_str = str(line_idx + 1) + ':'
-                    output(output_str + line)
+                    print_line(line_idx, ':', line, params)
                     last_printed = line_idx
                 to_print = params.after_context
 
             if not (params.before_context or params.after_context):
-                if params.line_number:
-                    output_str = str(line_idx + 1) + ':'
-                output(output_str + line)
+                print_line(line_idx, ':', line, params)
+        else:
+            if params.before_context:
+                prev_lines.append(line)
+                if len(prev_lines) == 1:
+                    prev_firstline_idx = line_idx
 
-        if params.before_context and not match:
-            prev_lines.append(line)
-            if len(prev_lines) == 1:
-                prev_firstline_idx = line_idx
+                if len(prev_lines) > params.before_context:
+                    prev_firstline_idx += 1
+                    prev_lines.pop(0)
 
-            if len(prev_lines) > params.before_context:
-                prev_firstline_idx += 1
-                prev_lines.pop(0)
+            if params.after_context:
+                if to_print > 0:
+                    # Печатаем текущую строку в after_context
+                    # И удаляем её из буфера before_context
+                    if params.before_context:
+                        prev_lines.pop()
+                    print_line(line_idx, '-', line, params)
+                    last_printed = line_idx
+                    to_print -= 1
 
-        if params.after_context and not match:
-            if to_print > 0:
-                output_str = ''
-                # Печатаем текущую строку в after_context
-                # И удаляем её из буфера before_context
-                if params.before_context:
-                    prev_lines.pop()
-                if params.line_number:
-                    output_str = str(line_idx + 1) + '-'
-                output(output_str + line)
-                last_printed = line_idx
-                to_print -= 1
     # end of for
 
     if params.count:
