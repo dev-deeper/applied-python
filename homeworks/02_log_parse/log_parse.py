@@ -119,7 +119,7 @@ def parse(
     while True:
         line = f.readline()  # Read a line from the log file
 
-        if line == '':  # Check that the end of the file is reached
+        if not line:  # Check that the end of the file is reached
             break
 
         log_url = parse_log(line.rstrip(), log, args)  # Check that the line is a log line and parse it if so
