@@ -85,7 +85,6 @@ class Action:
         self.from_version = from_version
         self.to_version = to_version
 
-    @staticmethod
     def apply(self, text):
         ...
 
