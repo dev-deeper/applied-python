@@ -1,18 +1,19 @@
 import argparse
 import socket
+from datetime import datetime, timedelta
 from os import path as osp
 from pickle import dump, load
 from uuid import uuid4
-from datetime import datetime
 
 
 class Task:
-    def __init__(self, length, data):
+    def __init__(self, length, data, timeout):
         self._length = int(length)
         self._data = data
+        self._timeout = timeout
         self._id = uuid4().hex
         self._in_progress = False
-        self._get_time = None
+        self._expired_time = None
 
     @property
     def id(self):
@@ -31,11 +32,11 @@ class Task:
         return self._in_progress
 
     @property
-    def get_time(self):
-        return self._get_time
+    def expired_time(self):
+        return self._expired_time
 
     def get(self):
-        self._get_time = datetime.now()
+        self._expired_time = datetime.now() + timedelta(0, self._timeout)
         self._in_progress = True
 
     def stop(self):
@@ -43,39 +44,21 @@ class Task:
 
 
 class Queue:
-    def __init__(self, name):
-        self._name = name
+    def __init__(self):
         self._task_count = 0
         self._task_id_list = []
         self._tasks = []
-        self._last_get_idx = -1
 
-    @property
-    def name(self):
-        return self._name
-
-    def _task_count_increment(self):
-        self._task_count += 1
-
-    def _task_count_decrement(self):
-        self._task_count -= 1
-
-    def _last_get_idx_decrement(self):
-        self._task_count -= 1
-
-    def _get_next(self, task_idx):
-        return task_idx + 1 if task_idx < self._task_count - 1 else 0
-
-    def check_timeout(self, timeout):
+    def check_timeout(self):
         for task in self._tasks:
-            if task.in_progress and (datetime.now() - task.get_time).seconds > timeout:
+            if task.in_progress and datetime.now() > task.expired_time:
                 task.stop()
 
-    def add_task(self, length, data):
-        task = Task(length, data)
+    def add_task(self, length, data, timeout):
+        task = Task(length, data, timeout)
         self._task_id_list.append(task.id)
         self._tasks.append(task)
-        self._task_count_increment()
+        self._task_count += 1
         return task.id
 
     def in_check_task(self, task_id):
@@ -85,16 +68,10 @@ class Queue:
         if not self._task_id_list:
             return 'NONE'
         else:
-            curr_idx = start_idx = self._get_next(self._last_get_idx)
-            while True:
-                task = self._tasks[curr_idx]
+            for task in self._tasks:
                 if not task.in_progress:
                     task.get()
-                    self._last_get_idx = curr_idx
                     return f'{task.id} {task.length} {task.data}'
-                curr_idx = self._get_next(curr_idx)
-                if curr_idx == start_idx:
-                    break
             return 'NONE'
 
     def ack_task(self, task_id):
@@ -104,35 +81,51 @@ class Queue:
         if not self._tasks[idx].in_progress:
             return 'NO'
         del self._task_id_list[idx], self._tasks[idx]
-        self._task_count_decrement()
-        self._last_get_idx_decrement()
+        self._task_count -= 1
         return 'YES'
 
 
 class Queues:
-    def __init__(self):
+    def __init__(self, timeout):
         self._queues = {}
+        self._timeout = timeout
 
-    def check_timeout(self, timeout):
+    def _check_timeout(self):
         for queue in self._queues:
-            self._queues[queue].check_timeout(timeout)
+            self._queues[queue].check_timeout()
 
-    def add(self, queue, length, data):
-        if queue not in self._queues:
-            self._queues[queue] = Queue(queue)
-        return self._queues[queue].add_task(length, data)
-
-    def in_check(self, queue, task_id):
-        return 'NO' if queue not in self._queues else \
-            self._queues[queue].in_check_task(task_id)
-
-    def get(self, queue):
-        return 'NONE' if queue not in self._queues else \
-            self._queues[queue].get_task()
-    
-    def ack(self, queue, task_id):
-        return 'NO' if queue not in self._queues else \
-            self._queues[queue].ack_task(task_id)
+    def do_task(self, input_data):
+        try:
+            req_type = input_data[0]
+            if req_type == 'ADD':
+                queue, length, data = input_data[1:]
+                if queue not in self._queues:
+                    self._queues[queue] = Queue()
+                return self._queues[queue].add_task(length, data, self._timeout)
+            elif req_type == 'GET':
+                self._check_timeout()
+                queue = input_data[1]
+                if queue not in self._queues:
+                    return 'NONE'
+                else:
+                    return self._queues[queue].get_task()
+            elif req_type == 'ACK':
+                self._check_timeout()
+                queue, task_id = input_data[1:]
+                if queue not in self._queues:
+                    return 'NO'
+                else:
+                    return self._queues[queue].ack_task(task_id)
+            elif req_type == 'IN':
+                queue, task_id = input_data[1:]
+                if queue not in self._queues:
+                    return 'NO'
+                else:
+                    return self._queues[queue].in_check_task(task_id)
+            else:
+                raise ValueError
+        except (IndexError, ValueError):
+            return 'ERROR'
 
 
 class TaskQueueServer:
@@ -142,10 +135,10 @@ class TaskQueueServer:
         self._ip = ip
         self._port = port
         self._path = path
-        self._dbfile = osp.join(self._path, self.dbfilename)
-        self._queues = self._load()
         self._timeout = timeout
         self._buffer = 1024
+        self._dbfile = osp.join(self._path, self.dbfilename)
+        self._queues = self._load()
 
     def _load(self):
         if osp.isfile(self._dbfile):
@@ -156,18 +149,18 @@ class TaskQueueServer:
                 print('DB load error')
                 exit(1)
         else:
-            q = Queues()
+            q = Queues(self._timeout)
         return q
 
-    def save(self):
+    def _save(self):
         try:
             with open(self._dbfile, 'wb') as db:
                 dump(self._queues, db)
             return 'OK'
         except OSError:
-            raise ValueError
+            return 'ERROR'
 
-    def start(self):
+    def _start(self):
         connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         connection.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         connection.bind((self._ip, self._port))
@@ -183,37 +176,15 @@ class TaskQueueServer:
                 break
         return data
 
-    @staticmethod
-    def _send(connection, data):
-        connection.send(data.encode())
-
-    def work(self, connection):
+    def _work(self, connection):
         while True:
             current_connection, address = connection.accept()
             while True:
                 conn_data = self._recvall(current_connection).decode().strip().split(' ')
-                req_type = conn_data[0]
-                self._queues.check_timeout(self._timeout)
-                try:
-                    if req_type == 'ADD':
-                        queue, length, data = conn_data[1:]
-                        self._send(current_connection, self._queues.add(queue, length, data))
-                    elif req_type == 'GET':
-                        queue = conn_data[1]
-                        self._send(current_connection, self._queues.get(queue))
-                    elif req_type == 'ACK':
-                        queue, task_id = conn_data[1:]
-                        self._send(current_connection, self._queues.ack(queue, task_id))
-                    elif req_type == 'IN':
-                        queue, task_id = conn_data[1:]
-                        self._send(current_connection, self._queues.in_check(queue, task_id))
-                    elif req_type == 'SAVE':
-                        self._send(current_connection, self.save())
-                    else:
-                        raise ValueError
-                except (IndexError, ValueError):
-                    self._send(current_connection, 'ERROR')
-
+                if conn_data[0] == 'SAVE':
+                    current_connection.send(self._save().encode())
+                else:
+                    current_connection.send(self._queues.do_task(conn_data).encode())
                 current_connection.shutdown(1)
                 current_connection.close()
                 break
@@ -221,8 +192,8 @@ class TaskQueueServer:
     def run(self):
         connection = None
         try:
-            connection = self.start()
-            self.work(connection)
+            connection = self._start()
+            self._work(connection)
         except OSError as e:
             if e.errno == 98:
                 """Exit if 'Address already in use' situation"""
