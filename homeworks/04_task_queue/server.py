@@ -73,10 +73,6 @@ class Queues:
         self._queues = {}
         self._timeout = timeout
 
-    def _check_timeout(self):
-        for queue in self._queues:
-            self._queues[queue].check_timeout()
-
     def do_task(self, input_data):
         try:
             req_type = input_data[0]
