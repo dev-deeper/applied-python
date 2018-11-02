@@ -1,5 +1,6 @@
 import argparse
 import socket
+from collections import OrderedDict
 from datetime import datetime, timedelta
 from os import path as osp
 from pickle import dump, load
@@ -10,9 +11,8 @@ class Task:
     def __init__(self, length, data, timeout):
         self._length = int(length)
         self._data = data
-        self._timeout = timeout
         self._id = uuid4().hex
-        self._in_progress = False
+        self._timeout = timeout
         self._expired_time = None
 
     @property
@@ -29,60 +29,43 @@ class Task:
 
     @property
     def in_progress(self):
-        return self._in_progress
-
-    @property
-    def expired_time(self):
-        return self._expired_time
+        if self._expired_time is None:
+            return False
+        else:
+            return bool(datetime.now() < self._expired_time)
 
     def get(self):
         self._expired_time = datetime.now() + timedelta(0, self._timeout)
-        self._in_progress = True
-
-    def stop(self):
-        self._in_progress = False
 
 
 class Queue:
     def __init__(self):
-        self._task_count = 0
-        self._task_id_list = []
-        self._tasks = []
-
-    def check_timeout(self):
-        for task in self._tasks:
-            if task.in_progress and datetime.now() > task.expired_time:
-                task.stop()
+        self._tasks = OrderedDict()
 
     def add_task(self, length, data, timeout):
         task = Task(length, data, timeout)
-        self._task_id_list.append(task.id)
-        self._tasks.append(task)
-        self._task_count += 1
+        self._tasks[task.id] = task
         return task.id
 
     def in_check_task(self, task_id):
-        return 'YES' if task_id in self._task_id_list else 'NO'
+        return 'YES' if task_id in self._tasks else 'NO'
 
     def get_task(self):
-        if not self._task_id_list:
+        if not self._tasks:
             return 'NONE'
         else:
-            for task in self._tasks:
+            for task in self._tasks.values():
                 if not task.in_progress:
                     task.get()
                     return f'{task.id} {task.length} {task.data}'
             return 'NONE'
 
     def ack_task(self, task_id):
-        if task_id not in self._task_id_list:
+        if task_id not in self._tasks or not self._tasks[task_id].in_progress:
             return 'NO'
-        idx = self._task_id_list.index(task_id)
-        if not self._tasks[idx].in_progress:
-            return 'NO'
-        del self._task_id_list[idx], self._tasks[idx]
-        self._task_count -= 1
-        return 'YES'
+        else:
+            del self._tasks[task_id]
+            return 'YES'
 
 
 class Queues:
@@ -103,14 +86,12 @@ class Queues:
                     self._queues[queue] = Queue()
                 return self._queues[queue].add_task(length, data, self._timeout)
             elif req_type == 'GET':
-                self._check_timeout()
                 queue = input_data[1]
                 if queue not in self._queues:
                     return 'NONE'
                 else:
                     return self._queues[queue].get_task()
             elif req_type == 'ACK':
-                self._check_timeout()
                 queue, task_id = input_data[1:]
                 if queue not in self._queues:
                     return 'NO'
