@@ -15,10 +15,10 @@ class TextHistory:
     def version(self):
         return self._version
 
-    def add_history(self, action):
+    def _add_history(self, action):
         self._history[self._version] = copy(action)
 
-    def check(self, pos, length=None):
+    def _check(self, pos, length=None):
         if pos is None:
             pos = len(self._text)
         elif not 0 <= pos <= len(self._text) or length is not None and pos + length > len(self._text):
@@ -26,17 +26,17 @@ class TextHistory:
         return pos
 
     def insert(self, text, pos=None):
-        pos = self.check(pos)
+        pos = self._check(pos)
         action = InsertAction(pos, text, self._version)
         return self.action(action)
 
     def replace(self, text, pos=None):
-        pos = self.check(pos)
+        pos = self._check(pos)
         action = ReplaceAction(pos, text, self._version)
         return self.action(action)
 
     def delete(self, pos, length):
-        pos = self.check(pos, length)
+        pos = self._check(pos, length)
         action = DeleteAction(pos, length, self._version)
         return self.action(action)
 
@@ -44,7 +44,7 @@ class TextHistory:
         if not (action.to_version > action.from_version):
             raise ValueError
         self._text = action.apply(self._text)
-        self.add_history(action)
+        self._add_history(action)
         self._version = action.to_version
         return self._version
 
@@ -72,9 +72,25 @@ class TextHistory:
                 continue
             elif ver <= to_version:
                 out.append(obj)
+                if len(out) > 1:
+                    match = self._compare(out[-2:])
+                    if match:
+                        out = out[:-2] + [match]
             else:
                 break
         return out
+
+    @staticmethod
+    def _compare(values):
+        old, new = values
+        if old.__class__ == new.__class__ and isinstance(new, InsertAction):
+            if old.pos + len(old.text) == new.pos:
+                return InsertAction(old.pos, old.text + new.text, old.from_version, new.to_version)
+        elif old.__class__ == new.__class__ and isinstance(new, DeleteAction):
+            if old.pos == new.pos:
+                return DeleteAction(old.pos, old.length + new.length, old.from_version, new.to_version)
+        else:
+            return False
 
 
 class Action:
