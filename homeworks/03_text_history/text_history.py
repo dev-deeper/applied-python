@@ -83,10 +83,10 @@ class TextHistory:
     @staticmethod
     def _compare(values):
         old, new = values
-        if old.__class__ == new.__class__ and isinstance(new, InsertAction):
+        if isinstance(old, InsertAction) and isinstance(new, InsertAction):
             if old.pos + len(old.text) == new.pos:
                 return InsertAction(old.pos, old.text + new.text, old.from_version, new.to_version)
-        elif old.__class__ == new.__class__ and isinstance(new, DeleteAction):
+        elif isinstance(old, DeleteAction) and isinstance(new, DeleteAction):
             if old.pos == new.pos:
                 return DeleteAction(old.pos, old.length + new.length, old.from_version, new.to_version)
         else:
