@@ -34,6 +34,7 @@ def whenthen(func):
 
     return Wrapper(func)
 
+
 @whenthen
 def fract(x):
     return x * fract(x - 1)
