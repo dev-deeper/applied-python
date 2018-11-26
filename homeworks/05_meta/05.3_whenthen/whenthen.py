@@ -10,7 +10,7 @@ def whenthen(func):
 
         def __call__(self, *args, **kwargs):
             if None in self._dict.values():
-                raise SyntaxError('One of \'then\' is missing')
+                raise SyntaxError("One of 'then' is missing")
             for when_func, then_func in self._dict.items():
                 if when_func(*args, **kwargs):
                     return self._dict[when_func](*args, **kwargs)
@@ -19,7 +19,7 @@ def whenthen(func):
 
         def when(self, when_func):
             if None in self._dict.values():
-                raise SyntaxError('Incorrect \'when\' condition order')
+                raise SyntaxError("Incorrect 'when' condition order")
             else:
                 self._dict[when_func] = None
                 return self
@@ -27,7 +27,7 @@ def whenthen(func):
         def then(self, then_func):
             last_key = next(reversed(self._dict.keys()))
             if not self._dict[last_key] is None:
-                raise SyntaxError('Incorrect \'when\' condition for this \'then\'')
+                raise SyntaxError("Incorrect 'when' condition for this 'then'")
             else:
                 self._dict[last_key] = then_func
                 return self
