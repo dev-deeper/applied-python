@@ -3,11 +3,13 @@ from time import time, sleep
 from types import FunctionType
 
 
-def _decorator(func):
-    name = func.__qualname__
-
+def _decorator(func, klass=None):
     @wraps(func)
     def wrapper(*args, **kwargs):
+        if klass is None:
+            name = func.__name__
+        else:
+            name = f"{klass.__name__}.{func.__name__}"
         print(f"`{name}` started")
         t_start = time()
         result = func(*args, **kwargs)
@@ -24,7 +26,7 @@ def profile(obj):
     else:
         """Decorate class methods"""
         for attr_name in [func for func in obj.__dict__ if callable(getattr(obj, func))]:
-            setattr(obj, attr_name, _decorator(getattr(obj, attr_name)))
+            setattr(obj, attr_name, _decorator(getattr(obj, attr_name), obj))
         return obj
 
 
@@ -35,7 +37,7 @@ def foo_func(cnt):
 
 
 @profile
-class Class:
+class MyClass:
     def __init__(self):
         sleep(0.1)
         print(f'### {self.__class__.__name__} __init__ works ###')
@@ -48,7 +50,7 @@ class Class:
     @staticmethod
     def sta():
         sleep(0.3)
-        print(f'### Class __staticmethod__ works ###')
+        print(f'### MyClass __staticmethod__ works ###')
 
     def abc(self):
         sleep(0.4)
@@ -60,7 +62,7 @@ class Class:
 
 
 @profile
-class Inherited(Class):
+class Inherited(MyClass):
     def __init__(self):
         super(Inherited, self).__init__()
         sleep(0.1)
@@ -75,9 +77,9 @@ if __name__ == "__main__":
     foo_func(1)
     foo_func(0.7)
     foo_func(0.5)
-    a = Class()
-    Class.cls()
-    Class.sta()
+    a = MyClass()
+    MyClass.cls()
+    MyClass.sta()
     a.abc()
     a.xyz(1)
     print()
