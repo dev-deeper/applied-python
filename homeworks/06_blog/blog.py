@@ -26,7 +26,7 @@ class Blog:
                 self._cursor.execute(f"USE \"{cfg.db}\";")
         except BaseException as err:
             if err.args[0] == 1049:
-                """IN CASE ''Unknown database 'blogDB'"""
+                """IN CASE 'Unknown database'"""
                 self._cursor.execute(f"CREATE DATABASE \"{cfg.db}\";")
                 self._cursor.execute(f"USE \"{cfg.db}\";")
                 DB.create(self._cursor)
@@ -491,18 +491,10 @@ class Blog:
             print('You are not logged in')
             return False
 
-        self._cursor.execute(f"SELECT id FROM USERS "
-                             f"WHERE username = \"{post_owner}\";")
-        post_owner_id = self._cursor.fetchall()
-
-        if not post_owner_id:
-            print(f"User '{post_owner}' doesn't exist")
-            return False
-        else:
-            post_owner_id = post_owner_id[0][0]
-
+        # GET post_id of post owner
         self._cursor.execute(f"SELECT id FROM POSTS "
-                             f"WHERE user_id = \"{post_owner_id}\" "
+                             f"WHERE user_id = "
+                             f"(SELECT id FROM USERS WHERE username = \"{post_owner}\") "
                              f"AND title = \"{post_title}\" "
                              f"AND active = true;")
         post_id = self._cursor.fetchall()
@@ -513,19 +505,11 @@ class Blog:
         else:
             post_id = post_id[0][0]
 
-        self._cursor.execute(f"SELECT id FROM USERS "
-                             f"WHERE username = \"{comment_user}\";")
-        comment_user_id = self._cursor.fetchall()
-
-        if not comment_user_id:
-            print(f"User '{comment_user_id}' doesn't exist")
-            return False
-        else:
-            comment_user_id = comment_user_id[0][0]
-
+        # GET comments of 'comment_user' in the post
         self._cursor.execute(f"SELECT title, text FROM COMMENTS "
                              f"WHERE active = true "
-                             f"AND user_id = \"{comment_user_id}\" "
+                             f"AND user_id = "
+                             f"(SELECT id FROM USERS WHERE username = \"{comment_user}\") "
                              f"AND post_id = \"{post_id}\";")
         comments = self._cursor.fetchall()
         if comments:
