@@ -531,8 +531,8 @@ class Blog:
         print("Comments for blog: " + f"{blog_title}")
         return t
 
-    def get_comments_branch(self, comm_id=None, sess_id=None):
-        """GET COMMENT BRANCH FOR CERTAIN COMMENT (via comment_id)"""
+    def get_comments_tree(self, comm_id=None, sess_id=None):
+        """GET COMMENTS TREE (via comment id)"""
         if comm_id is None or sess_id is None:
             return False
 
@@ -541,20 +541,29 @@ class Blog:
             print('You are not logged in')
             return False
 
-        self._cursor.execute(f"SELECT U.username, C.title, C.text "
-                             f"FROM COMMENTS C, USERS U "
-                             f"WHERE C.user_id = U.id "
-                             f"AND C.parent_comm_id = {comm_id};")
+        self._cursor.execute(f"SELECT C2.id, C2.parent_comm_id, C2.title, C2.text, U.username "
+                             f"FROM COMMENTS C1, COMMENTS C2, USERS U "
+                             f"WHERE C1.post_id = C2.post_id "
+                             f"AND C2.user_id = U.id "
+                             f"AND C1.id = {comm_id};")
         comments = self._cursor.fetchall()
 
         if not comments:
             print(f"Comments not found")
             return False
 
+        found_idx = [comm_id]
         t = PrettyTable(["username", 'Comment title', 'Comment text'])
         for record in comments:
-            t.add_row((record[0], record[1], record[2]))
-        return t
+            if record[1] in found_idx:
+                t.add_row((record[4], record[2], record[3]))
+                found_idx.append(record[0])
+
+        if len(found_idx) > 1:
+            return t
+        else:
+            print("Active comments not found")
+            return True
 
     def clear(self):
         DB.clear(self._cursor)
