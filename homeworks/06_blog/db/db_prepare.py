@@ -98,6 +98,9 @@ class DB:
             ");")
         cursor.execute(msg)
 
+        cursor.execute("CREATE INDEX USERS_id_index ON USERS (id);")
+        cursor.execute("CREATE INDEX COMMENTS_id_index ON COMMENTS (id);")
+
     @staticmethod
     def clear(cursor):
         try:

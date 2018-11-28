@@ -20,16 +20,16 @@ class Blog:
         self._timestamp_format = '%Y-%m-%d %H:%M:%S'
 
         try:
-            self._cursor.execute(f"SELECT DATABASE();")
-            res = self._cursor.fetchall()
-            if res[0][0] is None:
-                self._cursor.execute(f"USE \"{cfg.db}\";")
+            self._cursor.execute(f"USE {cfg.db};")
         except BaseException as err:
             if err.args[0] == 1049:
                 """IN CASE 'Unknown database'"""
-                self._cursor.execute(f"CREATE DATABASE \"{cfg.db}\";")
-                self._cursor.execute(f"USE \"{cfg.db}\";")
+                self._cursor.execute(f"CREATE DATABASE {cfg.db};")
+                self._cursor.execute(f"USE {cfg.db};")
                 DB.create(self._cursor)
+            elif err.args[0] == 1046:
+                """IN CASE 'No database selected'"""
+                self._cursor.execute(f"USE {cfg.db};")
 
     def _user_exist(self, username):
         """CHECK THAT USER EXIST"""
@@ -416,20 +416,11 @@ class Blog:
             print('You are not logged in')
             return False
 
-        self._cursor.execute(f"SELECT id FROM USERS "
-                             f"WHERE username = \"{post_owner}\";")
-        post_owner_id = self._cursor.fetchall()
-
-        if not post_owner_id:
-            print(f"User '{post_owner}' doesn't exist")
-            return False
-        else:
-            post_owner_id = post_owner_id[0][0]
-
-        self._cursor.execute(f"SELECT id FROM POSTS "
-                             f"WHERE user_id = \"{post_owner_id}\" "
-                             f"AND title = \"{post_title}\" "
-                             f"AND active = true;")
+        self._cursor.execute(f"SELECT P.id FROM POSTS P, USERS U "
+                             f"WHERE P.user_id = U.id "
+                             f"AND U.username = \"{post_owner}\" "
+                             f"AND P.title = \"{post_title}\" "
+                             f"AND P.active = true;")
         post_id = self._cursor.fetchall()
 
         if not post_id:
@@ -452,19 +443,12 @@ class Blog:
                 print('Incorrect syntax')
                 return False
 
-            self._cursor.execute(f"SELECT id FROM USERS "
-                                 f"WHERE username = \"{to_comment_user}\";")
-            to_comment_user_id = self._cursor.fetchall()
-            if not to_comment_user_id:
-                print(f"User '{to_comment_user}' doesn't exist")
-                return False
-            else:
-                to_comment_user_id = to_comment_user_id[0][0]
-            self._cursor.execute(f"SELECT id FROM COMMENTS "
-                                 f"WHERE user_id = \"{to_comment_user_id}\" "
-                                 f"AND post_id = \"{post_id}\" "
-                                 f"AND title = \"{to_comment_title}\" "
-                                 f"AND active = true;")
+            self._cursor.execute(f"SELECT C.id FROM COMMENTS C, USERS U "
+                                 f"WHERE C.user_id = U.id "
+                                 f"AND U.username = \"{to_comment_user}\""
+                                 f"AND C.post_id = \"{post_id}\" "
+                                 f"AND C.title = \"{to_comment_title}\" "
+                                 f"AND C.active = true;")
             parent_comm_id = self._cursor.fetchall()
             if not parent_comm_id:
                 print(f"Comment '{to_comment_title}' of '{to_comment_user}' doesn't exist")
@@ -491,26 +475,13 @@ class Blog:
             print('You are not logged in')
             return False
 
-        # GET post_id of post owner
-        self._cursor.execute(f"SELECT id FROM POSTS "
-                             f"WHERE user_id = "
-                             f"(SELECT id FROM USERS WHERE username = \"{post_owner}\") "
-                             f"AND title = \"{post_title}\" "
-                             f"AND active = true;")
-        post_id = self._cursor.fetchall()
-
-        if not post_id:
-            print(f"Post '{post_title}' of '{post_owner}' doesn't exist")
-            return False
-        else:
-            post_id = post_id[0][0]
-
-        # GET comments of 'comment_user' in the post
-        self._cursor.execute(f"SELECT title, text FROM COMMENTS "
-                             f"WHERE active = true "
-                             f"AND user_id = "
-                             f"(SELECT id FROM USERS WHERE username = \"{comment_user}\") "
-                             f"AND post_id = \"{post_id}\";")
+        # GET comments of 'comment_user' in the post 'post_title'
+        self._cursor.execute(f"SELECT C.title, C.text FROM POSTS P, COMMENTS C, USERS U "
+                             f"WHERE C.active = true "
+                             f"AND P.id = C.post_id "
+                             f"AND C.user_id = U.id "
+                             f"AND U.username = \"{comment_user}\""
+                             f"AND P.title = \"{post_title}\";")
         comments = self._cursor.fetchall()
         if comments:
             if pretty:
@@ -526,6 +497,64 @@ class Blog:
         else:
             print("Active comments not found")
             return True
+
+    def get_users_comments(self, *users, blog_title=None, blog_owner=None, sess_id=None):
+        """GET ALL COMMENTS FOR 1 OR MORE USERS FOR CERTAIN BLOG"""
+        if not len(users) or blog_title is None or blog_owner is None or sess_id is None:
+            return False
+
+        user_id = self._authorised(sess_id)
+        if not user_id:
+            print('You are not logged in')
+            return False
+
+        users_str = ', '.join(filter(None, [f"\"{user}\"" for user in users]))
+
+        # GET comments for blog 'blog_title'
+        self._cursor.execute(f"SELECT U.username, C.title, C.text "
+                             f"FROM BLOGS B, BLOGS_POSTS BP, POSTS P, COMMENTS C, USERS U "
+                             f"WHERE B.id = BP.blog_id "
+                             f"AND C.user_id = U.id "
+                             f"AND P.id = BP.post_id "
+                             f"AND C.post_id = P.id "
+                             f"AND B.title = \"{blog_title}\" "
+                             f"AND U.username IN ({users_str});")
+        comments = self._cursor.fetchall()
+
+        if not comments:
+            print(f"Comments not found")
+            return False
+
+        t = PrettyTable(["username", 'Comment title', 'Comment text'])
+        for record in comments:
+            t.add_row((record[0], record[1], record[2]))
+        print("Comments for blog: " + f"{blog_title}")
+        return t
+
+    def get_comments_branch(self, comm_id=None, sess_id=None):
+        """GET COMMENT BRANCH FOR CERTAIN COMMENT (via comment_id)"""
+        if comm_id is None or sess_id is None:
+            return False
+
+        user_id = self._authorised(sess_id)
+        if not user_id:
+            print('You are not logged in')
+            return False
+
+        self._cursor.execute(f"SELECT U.username, C.title, C.text "
+                             f"FROM COMMENTS C, USERS U "
+                             f"WHERE C.user_id = U.id "
+                             f"AND C.parent_comm_id = {comm_id};")
+        comments = self._cursor.fetchall()
+
+        if not comments:
+            print(f"Comments not found")
+            return False
+
+        t = PrettyTable(["username", 'Comment title', 'Comment text'])
+        for record in comments:
+            t.add_row((record[0], record[1], record[2]))
+        return t
 
     def clear(self):
         DB.clear(self._cursor)
