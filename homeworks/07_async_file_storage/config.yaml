@@ -1,0 +1,43 @@
+# Nodes parameters
+
+server_defaults: &server_defaults
+  save_local: False
+  save_timeout: 10 # seconds
+
+n01: &n01 "http://localhost:25001"
+n02: &n02 "http://localhost:25002"
+n03: &n03 "http://localhost:25003"
+
+node01:
+  <<: *server_defaults
+  wdir: "/tmp/nodes/node01"
+  host: localhost
+  port: 25001
+  nodes:
+  -
+    url: *n02
+    save_local: True
+  -
+    url: *n03
+
+node02:
+  <<: *server_defaults
+  wdir: "/tmp/nodes/node02"
+  host: localhost
+  port: 25002
+  nodes:
+  -
+    url: *n01
+  -
+    url: *n03
+
+node03:
+  <<: *server_defaults
+  wdir: "/tmp/nodes/node03"
+  host: localhost
+  port: 25003
+  nodes:
+  -
+    url: *n01
+  -
+    url: *n02
