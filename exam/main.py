@@ -1,30 +1,30 @@
-files_content = dict()
-files, lines = [], []
-
-while True:
-    try:
-        item = input()
-    except (EOFError, KeyboardInterrupt):
-        break
-    tmp = item.split()
-    files.append(tmp[0])
-    lines.append(int(tmp[1]))
-
-uniq_files = set(files)
-
-for filename in uniq_files:
-    files_content[filename] = []
-    tmp_lines = [lines[idx] - 1 for idx, file in enumerate(files) if file == filename]
-    with open(filename, 'r') as s:
-        for i, line in enumerate(s):
-            if i in tmp_lines:
-                tmp_lines.remove(i)
-                files_content[filename].append((i + 1, line))
-            if not tmp_lines:
-                break
-
-for idx, line_num in enumerate(lines):
-    for file in files_content[files[idx]]:
-        if file[0] == line_num:
-            print(file[1].strip())
+def main():
+    files_lines, files_content, uniq_fl = [], {}, {}
+    while True:
+        try:
+            file, lineno = [[file, int(lineno)] for file, lineno in [input().split()]][0]
+        except:
             break
+        files_lines.append((file, lineno))
+        if file not in uniq_fl:
+            uniq_fl[file] = set()
+        uniq_fl[file].add(lineno - 1)
+
+    for filename in uniq_fl:
+        files_content[filename] = {}
+        uniq_lines = uniq_fl[filename]
+        with open(filename, 'r') as s:
+            for lineidx, line in enumerate(s):
+                if lineidx not in uniq_lines:
+                    continue
+                files_content[filename][lineidx + 1] = line.strip()
+                uniq_lines.remove(lineidx)
+                if not uniq_lines:
+                    break
+
+    for file, lineno in files_lines:
+        print(files_content[file][lineno])
+
+
+if __name__ == '__main__':
+    main()
