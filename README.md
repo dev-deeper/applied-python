@@ -1,1 +1,1 @@
-# _"Applied-python" course_
+# Repository for "Applied Python" course in TechnoPark project by Mail.Ru Group
